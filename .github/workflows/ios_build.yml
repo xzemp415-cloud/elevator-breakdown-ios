@@ -1,0 +1,32 @@
+name: build ios ipa
+on: 
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: install capacitor and build
+        run: |
+          npm install
+          mkdir -p www && cp index.html www/
+          npx cap init "elevator" "com.game.elevator" --web-dir www
+          npx cap add ios
+          npx cap copy ios
+      - name: build xcode
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+      - name: package ipa
+        run: |
+          mkdir Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r elevator.ipa Payload
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-ipa
+          path: elevator.ipa
