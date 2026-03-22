@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>поломка лифта</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; touch-action: none; font-family: 'Courier New', monospace; user-select: none; }
+        
+        /* меню и настройки */
+        #menu, #settings-screen { position: absolute; width: 100%; height: 100%; background: #0a0a0a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+        .btn { width: 250px; padding: 18px; margin: 10px; background: #1a1a1a; color: #fff; border: 2px solid #444; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; }
+        .btn:active { background: #fff; color: #000; }
+
+        /* интерфейс */
+        #ui { position: absolute; width: 100%; height: 100%; z-index: 100; pointer-events: none; display: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 1px solid rgba(255,255,255,0.8); transform: translate(-50%, -50%); border-radius: 50%; }
+        #status { position: absolute; top: 30px; right: 30px; font-size: 35px; color: white; display: flex; gap: 20px; }
+        
+        /* управление */
+        #joy-zone { position: absolute; bottom: 50px; left: 50px; width: 140px; height: 140px; background: rgba(255,255,255,0.05); border-radius: 50%; border: 2px solid #555; pointer-events: auto; }
+        #joy-stick { position: absolute; top: 45px; left: 45px; width: 50px; height: 50px; background: #fff; border-radius: 50%; pointer-events: none; }
+        #jump-btn { position: absolute; bottom: 55px; right: 55px; width: 90px; height: 90px; background: rgba(255,255,255,0.1); border: 2px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; pointer-events: auto; font-weight: bold; }
+        #action-btn { position: absolute; bottom: 160px; right: 70px; width: 65px; height: 65px; background: rgba(0,255,0,0.2); border: 2px solid #0f0; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 35px; pointer-events: auto; }
+
+        /* 3d мир */
+        #viewport { position: absolute; width: 100%; height: 100%; perspective: 800px; display: none; background: #111; }
+        #camera { width: 100%; height: 100%; transform-style: preserve-3d; transition: margin-top 0.2s; }
+        #world { width: 100%; height: 100%; transform-style: preserve-3d; }
+
+        .plane { position: absolute; background: #555; border: 1px solid #666; }
+        .floor { width: 1000px; height: 6000px; background: #2a2a2a; transform: rotateX(90deg) translateZ(-150px); left: -500px; top: -3000px; }
+        .roof { width: 1000px; height: 6000px; background: #333; transform: rotateX(90deg) translateZ(150px); left: -500px; top: -3000px; }
+        .wall-l { width: 6000px; height: 300px; transform: rotateY(90deg) translateZ(-400px); left: -3000px; background: #1a1a1a; }
+        .wall-r { width: 6000px; height: 300px; transform: rotateY(-90deg) translateZ(-400px); left: -3000px; background: #1a1a1a; }
+        
+        .shelf { position: absolute; width: 160px; height: 15px; background: #444; transform: rotateY(-90deg) translate3d(800px, -30px, -390px); border: 1px solid #777; }
+        #gun-obj { position: absolute; width: 80px; height: 80px; transform: translate3d(350px, -100px, -800px) rotateY(-90deg); display: flex; align-items: center; justify-content: center; font-size: 50px; pointer-events: auto; cursor: pointer; }
+        
+        #green-door { position: absolute; width: 240px; height: 290px; background: rgba(0,255,0,0.1); border: 8px solid #0f0; transform: translate3d(-120px, -145px, -600px); transition: 0.8s; pointer-events: auto; box-shadow: 0 0 30px #0f0; }
+        #red-door { position: absolute; width: 240px; height: 290px; background: #300; border: 8px solid #f00; transform: translate3d(-120px, -145px, -3500px); transition: 0.8s; }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <h1 style="color:#fff; letter-spacing:5px;">ПОЛОМКА ЛИФТА: ГЛАВА 1</h1>
+        <button class="btn" onclick="startGame()">играть</button>
+        <button class="btn" onclick="setScreen(true)">настройки</button>
+    </div>
+
+    <div id="settings-screen" style="display:none;">
+        <h2 style="color:#fff;">настройки</h2>
+        <button class="btn" onclick="toggleMusic()">музыка: <span id="m-val">v</span></button>
+        <button class="btn" onclick="alert('инструкция: 1. открой зеленую дверь. 2. возьми 🔫 на полке справа. 3. у красной двери жми 🧿')">справка</button>
+        <button class="btn" onclick="setScreen(false)">назад</button>
+    </div>
+
+    <div id="ui">
+        <div id="status"><span id="inv" style="display:none;">🧿</span> <span id="hand">✊</span></div>
+        <div id="crosshair"></div>
+        <div id="joy-zone"><div id="joy-stick"></div></div>
+        <div id="action-btn" ontouchstart="useAmulet(event)">🧿</div>
+        <div id="jump-btn" ontouchstart="jump(event)">UP</div>
+    </div>
+
+    <div id="viewport">
+        <div id="camera">
+            <div id="world">
+                <div class="plane floor"></div><div class="plane roof"></div>
+                <div class="plane wall-l"></div><div class="plane wall-r"></div>
+                <div class="shelf"></div>
+                <div id="green-door" onclick="this.style.transform='translate3d(-600px, -145px, -600px) rotateY(-90deg)'"></div>
+                <div id="gun-obj" onclick="pickGun()">🔫</div>
+                <div id="red-door"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let camY = 0, camX = 0, pZ = 0, pX = 0, mX = 0, mY = 0, isMoving = false, gunTaken = false;
+
+    function startGame() { document.getElementById('menu').style.display='none'; document.getElementById('ui').style.display='block'; document.getElementById('viewport').style.display='block'; }
+    function setScreen(s) { document.getElementById('settings-screen').style.display = s?'flex':'none'; }
+    function toggleMusic() { let v=document.getElementById('m-val'); v.innerText = v.innerText==='v'?'x':'v'; }
+
+    function pickGun() {
+        gunTaken = true; document.getElementById('gun-obj').style.display='none';
+        document.getElementById('inv').style.display='block';
+        document.getElementById('action-btn').style.display='flex';
+    }
+
+    function useAmulet(e) {
+        e.preventDefault(); if(!gunTaken) return;
+        document.getElementById('hand').innerText = '🧿';
+        if(pZ < -3100) {
+            document.getElementById('red-door').style.borderColor = '#0f0';
+            document.getElementById('red-door').style.transform = 'translate3d(-600px, -145px, -3500px) rotateY(-90deg)';
+        }
+        setTimeout(()=> document.getElementById('hand').innerText = '✊', 600);
+    }
+
+    function jump(e) { e.preventDefault(); let c=document.getElementById('camera'); c.style.marginTop='-90px'; setTimeout(()=>c.style.marginTop='0px', 250); }
+
+    // камера (правая часть экрана)
+    let touchX, touchY;
+    document.addEventListener('touchstart', (e) => { 
+        if(!e.target.closest('#joy-zone')) { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }
+    });
+    document.addEventListener('touchmove', (e) => {
+        if(e.target.closest('#joy-zone') || e.target.id === 'jump-btn' || e.target.id === 'action-btn') return;
+        let t = e.touches[0];
+        camY -= (t.clientX - touchX) * 0.4;
+        camX = Math.max(-40, Math.min(40, camX + (t.clientY - touchY) * 0.4));
+        touchX = t.clientX; touchY = t.clientY;
+        document.getElementById('camera').style.transform = `rotateX(${camX}deg) rotateY(${camY}deg)`;
+    }, {passive: false});
+
+    // джойстик
+    const jz = document.getElementById('joy-zone'), js = document.getElementById('joy-stick');
+    jz.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        let t = e.touches[0], r = jz.getBoundingClientRect();
+        let dx = t.clientX - (r.left + 70), dy = t.clientY - (r.top + 70);
+        let dist = Math.min(50, Math.sqrt(dx*dx + dy*dy));
+        let ang = Math.atan2(dy, dx);
+        mX = Math.cos(ang) * (dist / 50);
+        mY = Math.sin(ang) * (dist / 50);
+        js.style.transform = `translate(${Math.cos(ang)*dist}px, ${Math.sin(ang)*dist}px)`;
+        isMoving = true;
+    }, {passive: false});
+    jz.addEventListener('touchend', () => { js.style.transform='none'; isMoving=false; mX=0; mY=0; });
+
+    function loop() {
+        if(isMoving) {
+            let rad = camY * Math.PI / 180;
+            let nZ = pZ + (mY * Math.cos(rad) + mX * Math.sin(rad)) * 15;
+            let nX = pX + (mY * Math.sin(rad) - mX * Math.cos(rad)) * 15;
+            
+            // коллизии (жестко держим в коридоре)
+            if (nX > -320 && nX < 320) pX = nX;
+            if (nZ > -4000 && nZ < 100) pZ = nZ;
+            
+            document.getElementById('world').style.transform = `translate3d(${-pX}px, 0, ${-pZ}px)`;
+        }
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+</html>
